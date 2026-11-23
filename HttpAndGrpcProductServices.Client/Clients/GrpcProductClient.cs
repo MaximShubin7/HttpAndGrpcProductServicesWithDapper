@@ -8,8 +8,8 @@ namespace HttpAndGrpcProductServices.Client.Clients;
 
 public sealed class GrpcProductClient : IProductClient, IDisposable
 {
-    private readonly GrpcChannel _channel;
-    private readonly ProductServiceClient _client;
+    private readonly GrpcChannel channel;
+    private readonly ProductServiceClient client;
 
     public GrpcProductClient(string baseUrl)
     {
@@ -17,15 +17,15 @@ public sealed class GrpcProductClient : IProductClient, IDisposable
         {
             ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
         };
-        _channel = GrpcChannel.ForAddress(baseUrl, new GrpcChannelOptions { HttpHandler = handler });
-        _client = new ProductServiceClient(_channel);
+        channel = GrpcChannel.ForAddress(baseUrl, new GrpcChannelOptions { HttpHandler = handler });
+        client = new ProductServiceClient(channel);
     }
 
     public async Task RunAsync(CancellationToken ct = default)
     {
         Console.WriteLine("\ngRPC клиент");
 
-        var created = await _client.CreateProductAsync(new CreateProductRequest
+        var created = await client.CreateProductAsync(new CreateProductRequest
         {
             Name = "Ноутбук",
             Price = 75000.50,
@@ -35,21 +35,21 @@ public sealed class GrpcProductClient : IProductClient, IDisposable
         }, cancellationToken: ct);
         Console.WriteLine($"Создан: {created.Id}");
 
-        var product = await _client.GetProductByIdAsync(new GetProductByIdRequest { Id = created.Id }, cancellationToken: ct);
+        var product = await client.GetProductByIdAsync(new GetProductByIdRequest { Id = created.Id }, cancellationToken: ct);
         Console.WriteLine($"Найден: {product.Product.Name} ({product.Product.Price})");
 
         try
         {
-            await _client.GetProductByIdAsync(new GetProductByIdRequest { Id = Guid.NewGuid().ToString() }, cancellationToken: ct);
+            await client.GetProductByIdAsync(new GetProductByIdRequest { Id = Guid.NewGuid().ToString() }, cancellationToken: ct);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
         {
             Console.WriteLine("Поиск несуществующего ID: 404");
         }
 
-        var list = await _client.GetProductsAsync(new GetProductsRequest { PageNumber = 1, PageSize = 5 }, cancellationToken: ct);
+        var list = await client.GetProductsAsync(new GetProductsRequest { PageNumber = 1, PageSize = 5 }, cancellationToken: ct);
         Console.WriteLine($"Всего товаров: {list.TotalCount}");
     }
 
-    public void Dispose() => _channel.Dispose();
+    public void Dispose() => channel.Dispose();
 }

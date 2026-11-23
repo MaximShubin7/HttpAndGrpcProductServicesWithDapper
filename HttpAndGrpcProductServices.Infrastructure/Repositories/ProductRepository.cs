@@ -1,27 +1,67 @@
-﻿using HttpAndGrpcProductServices.Domain.Abstractions;
+﻿using Dapper;
+using HttpAndGrpcProductServices.Domain.Abstractions;
 using HttpAndGrpcProductServices.Domain.Enums;
 using HttpAndGrpcProductServices.Domain.Models;
-using System.Collections.Concurrent;
+using Microsoft.Extensions.Configuration;
+using Npgsql;
 
 namespace HttpAndGrpcProductServices.Infrastructure.Repositories;
 
 public class ProductRepository : IProductRepository
 {
-    private readonly ConcurrentDictionary<Guid, Product> _products = new();
+    private readonly string _connectionString;
 
-    public Task<Guid> AddAsync(Product product, CancellationToken ct = default)
+    public ProductRepository(IConfiguration configuration)
     {
-        _products[product.Id] = product;
-        return Task.FromResult(product.Id);
+        _connectionString = configuration.GetConnectionString("Default")
+            ?? throw new InvalidOperationException("Connection string 'Default' not found");
     }
 
-    public Task<Product?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    private NpgsqlConnection CreateConnection() => new(_connectionString);
+
+    public async Task<Guid> AddAsync(Product product, CancellationToken ct = default)
     {
-        _products.TryGetValue(id, out var product);
-        return Task.FromResult(product);
+        const string sql = """
+            INSERT INTO products (id, name, price, weight, type, created_at, warehouse_number)
+            VALUES (@Id, @Name, @Price, @Weight, @Type, @CreatedAt, @WarehouseNumber)
+            """;
+
+        var parameters = new
+        {
+            product.Id,
+            product.Name,
+            product.Price,
+            product.Weight,
+            Type = (int)product.Type,
+            product.CreatedAt,
+            product.WarehouseNumber
+        };
+
+        using var connection = CreateConnection();
+        await connection.ExecuteAsync(new CommandDefinition(sql, parameters, cancellationToken: ct));
+        return product.Id;
     }
 
-    public Task<(IReadOnlyList<Product> Items, int TotalCount)> GetFilteredAsync(
+    public async Task<Product?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT id            AS Id,
+                   name          AS Name,
+                   price         AS Price,
+                   weight        AS Weight,
+                   type          AS Type,
+                   created_at    AS CreatedAt,
+                   warehouse_number AS WarehouseNumber
+            FROM products
+            WHERE id = @Id
+            """;
+
+        using var connection = CreateConnection();
+        return await connection.QuerySingleOrDefaultAsync<Product>(
+            new CommandDefinition(sql, new { Id = id }, cancellationToken: ct));
+    }
+
+    public async Task<(IReadOnlyList<Product> Items, int TotalCount)> GetFilteredAsync(
         DateTime? createdFrom,
         DateTime? createdTo,
         ProductType? type,
@@ -30,27 +70,87 @@ public class ProductRepository : IProductRepository
         int pageSize,
         CancellationToken ct = default)
     {
-        var query = _products.Values.AsEnumerable();
+        var where = new List<string>();
+        var parameters = new DynamicParameters();
 
         if (createdFrom.HasValue)
-            query = query.Where(p => p.CreatedAt >= createdFrom.Value);
+        {
+            where.Add("created_at >= @CreatedFrom");
+            parameters.Add("CreatedFrom", createdFrom.Value);
+        }
 
         if (createdTo.HasValue)
-            query = query.Where(p => p.CreatedAt <= createdTo.Value);
+        {
+            where.Add("created_at <= @CreatedTo");
+            parameters.Add("CreatedTo", createdTo.Value);
+        }
 
         if (type.HasValue)
-            query = query.Where(p => p.Type == type.Value);
+        {
+            where.Add("type = @Type");
+            parameters.Add("Type", (int)type.Value);
+        }
 
         if (warehouseNumber.HasValue)
-            query = query.Where(p => p.WarehouseNumber == warehouseNumber.Value);
+        {
+            where.Add("warehouse_number = @WarehouseNumber");
+            parameters.Add("WarehouseNumber", warehouseNumber.Value);
+        }
 
-        var list = query.OrderByDescending(p => p.CreatedAt).ToList();
-        var total = list.Count;
-        var items = list
-            .Skip((pageNumber - 1) * pageSize)
-            .Take(pageSize)
-            .ToList();
+        var whereClause = where.Count > 0 ? "WHERE " + string.Join(" AND ", where) : "";
 
-        return Task.FromResult<(IReadOnlyList<Product>, int)>((items, total));
+        var countSql = $"SELECT COUNT(*) FROM products {whereClause}";
+        var itemsSql = $"""
+            SELECT id            AS Id,
+                   name          AS Name,
+                   price         AS Price,
+                   weight        AS Weight,
+                   type          AS Type,
+                   created_at    AS CreatedAt,
+                   warehouse_number AS WarehouseNumber
+            FROM products
+            {whereClause}
+            ORDER BY created_at DESC
+            LIMIT @Limit OFFSET @Offset
+            """;
+
+        parameters.Add("Limit", pageSize);
+        parameters.Add("Offset", (pageNumber - 1) * pageSize);
+
+        using var connection = CreateConnection();
+        var total = await connection.ExecuteScalarAsync<int>(
+            new CommandDefinition(countSql, parameters, cancellationToken: ct));
+        var items = (await connection.QueryAsync<Product>(
+            new CommandDefinition(itemsSql, parameters, cancellationToken: ct))).ToList();
+
+        return (items, total);
+    }
+
+    public async Task<bool> UpdateAsync(Product product, CancellationToken ct = default)
+    {
+        const string sql = """
+            UPDATE products
+            SET name = @Name,
+                price = @Price,
+                weight = @Weight,
+                type = @Type,
+                warehouse_number = @WarehouseNumber
+            WHERE id = @Id
+            """;
+
+        var parameters = new
+        {
+            product.Id,
+            product.Name,
+            product.Price,
+            product.Weight,
+            Type = (int)product.Type,
+            product.WarehouseNumber
+        };
+
+        using var connection = CreateConnection();
+        var rows = await connection.ExecuteAsync(
+            new CommandDefinition(sql, parameters, cancellationToken: ct));
+        return rows > 0;
     }
 }

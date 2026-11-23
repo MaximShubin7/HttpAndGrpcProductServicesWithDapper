@@ -9,30 +9,30 @@ namespace HttpAndGrpcProductServices.Http.Middleware;
 
 public class ErrorHandlingMiddleware
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<ErrorHandlingMiddleware> _logger;
+    private readonly RequestDelegate next;
+    private readonly ILogger<ErrorHandlingMiddleware> logger;
 
     public ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorHandlingMiddleware> logger)
     {
-        _next = next;
-        _logger = logger;
+        this.next = next;
+        this.logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context)
     {
         try
         {
-            await _next(context);
+            await next(context);
         }
         catch (ValidationException ex)
         {
-            _logger.LogWarning(ex, "Ошибка валидации запроса");
+            logger.LogWarning(ex, "Ошибка валидации запроса");
             await WriteProblemDetailsAsync(context, HttpStatusCode.BadRequest,
                 "Ошибка валидации", ex.Errors.Select(e => e.ErrorMessage));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Непредвиденная ошибка");
+            logger.LogError(ex, "Непредвиденная ошибка");
             await WriteProblemDetailsAsync(context, HttpStatusCode.InternalServerError,
                 "Внутренняя ошибка сервера", new[] { "Произошла непредвиденная ошибка" });
         }

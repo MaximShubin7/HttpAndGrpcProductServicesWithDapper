@@ -18,6 +18,10 @@ service ProductService {
   rpc GetProductById (GetProductByIdRequest) returns (GetProductByIdResponse) {
     option (google.api.http) = { get: "/v1/products/{id}" };
   }
+
+  rpc UpdateProduct (UpdateProductRequest) returns (UpdateProductResponse) {
+  option (google.api.http) = { put: "/v1/products/{id}" body: "*" };
+}
 }
 
 message CreateProductRequest {
@@ -62,4 +66,17 @@ message GetProductByIdRequest {
 
 message GetProductByIdResponse {
   ProductMessage product = 1;
+}
+
+message UpdateProductRequest {
+  string id = 1;
+  string name = 2;
+  double price = 3;
+  double weight = 4;
+  int32 type = 5;
+  int32 warehouse_number = 6;
+}
+
+message UpdateProductResponse {
+  bool updated = 1;
 }

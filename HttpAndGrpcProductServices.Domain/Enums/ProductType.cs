@@ -1,9 +1,12 @@
 ﻿namespace HttpAndGrpcProductServices.Domain.Enums;
 
 public enum ProductType
-{ 
-    General, 
-    HouseholdChemicals, 
-    Electronics, 
-    Food
+{
+    General = 0,
+
+    HouseholdChemistry = 1,
+
+    Technics = 2,
+
+    Food = 3
 }

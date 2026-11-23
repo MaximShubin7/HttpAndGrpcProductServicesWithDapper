@@ -8,15 +8,20 @@ namespace HttpAndGrpcProductServices.Grpc.Services;
 
 public class ProductGrpcService : ProductServiceBase
 {
-    private readonly IProductService _service;
-    private readonly IValidator<CreateProductDto> _createValidator;
+    private readonly IProductService service;
+
+    private readonly IValidator<CreateProductDto> createValidator;
+
+    private readonly IValidator<UpdateProductDto> updateValidator;
 
     public ProductGrpcService(
         IProductService service,
-        IValidator<CreateProductDto> createValidator)
+        IValidator<CreateProductDto> createValidator,
+        IValidator<UpdateProductDto> updateValidator)
     {
-        _service = service;
-        _createValidator = createValidator;
+        this.service = service;
+        this.createValidator = createValidator;
+        this.updateValidator = updateValidator;
     }
 
     public override async Task<CreateProductResponse> CreateProduct(
@@ -32,12 +37,12 @@ public class ProductGrpcService : ProductServiceBase
             WarehouseNumber = request.WarehouseNumber
         };
 
-        var validation = await _createValidator.ValidateAsync(dto, context.CancellationToken);
+        var validation = await createValidator.ValidateAsync(dto, context.CancellationToken);
         if (!validation.IsValid)
             throw new RpcException(new Status(StatusCode.InvalidArgument,
                 string.Join("; ", validation.Errors.Select(e => e.ErrorMessage))));
 
-        var id = await _service.CreateAsync(dto, context.CancellationToken);
+        var id = await service.CreateAsync(dto, context.CancellationToken);
         return new CreateProductResponse { Id = id.ToString() };
     }
 
@@ -58,7 +63,7 @@ public class ProductGrpcService : ProductServiceBase
             PageSize = request.PageSize > 0 ? request.PageSize : 10
         };
 
-        var (items, total) = await _service.GetFilteredAsync(filter, context.CancellationToken);
+        var (items, total) = await service.GetFilteredAsync(filter, context.CancellationToken);
 
         var response = new GetProductsResponse { TotalCount = total };
         response.Items.AddRange(items.Select(p => new ProductMessage
@@ -81,7 +86,7 @@ public class ProductGrpcService : ProductServiceBase
         if (!Guid.TryParse(request.Id, out var id))
             throw new RpcException(new Status(StatusCode.InvalidArgument, "Некорректный Id"));
 
-        var product = await _service.GetByIdAsync(id, context.CancellationToken);
+        var product = await service.GetByIdAsync(id, context.CancellationToken);
         if (product is null)
             throw new RpcException(new Status(StatusCode.NotFound,
                 $"Товар с Id '{id}' не найден"));
@@ -99,5 +104,33 @@ public class ProductGrpcService : ProductServiceBase
                 WarehouseNumber = product.WarehouseNumber
             }
         };
+    }
+
+    public override async Task<UpdateProductResponse> UpdateProduct(
+    UpdateProductRequest request, ServerCallContext context)
+    {
+        if (!Guid.TryParse(request.Id, out var id))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Некорректный Id"));
+
+        var dto = new UpdateProductDto
+        {
+            Name = request.Name,
+            Price = (decimal)request.Price,
+            Weight = request.Weight,
+            Type = request.Type,
+            WarehouseNumber = request.WarehouseNumber
+        };
+
+        var validation = await updateValidator.ValidateAsync(dto, context.CancellationToken);
+        if (!validation.IsValid)
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                string.Join("; ", validation.Errors.Select(e => e.ErrorMessage))));
+
+        var updated = await service.UpdateAsync(id, dto, context.CancellationToken);
+        if (!updated)
+            throw new RpcException(new Status(StatusCode.NotFound,
+                $"Товар с Id '{id}' не найден"));
+
+        return new UpdateProductResponse { Updated = true };
     }
 }

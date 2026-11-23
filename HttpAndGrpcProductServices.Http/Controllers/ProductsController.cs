@@ -10,11 +10,11 @@ namespace HttpAndGrpcProductServices.Http.Controllers;
 [Route("api/[controller]")]
 public class ProductsController : ControllerBase
 {
-    private readonly IProductService _service;
+    private readonly IProductService service;
 
     public ProductsController(IProductService service)
     {
-        _service = service;
+        this.service = service;
     }
 
     [HttpPost]
@@ -29,7 +29,7 @@ public class ProductsController : ControllerBase
         if (!validation.IsValid)
             throw new ValidationException(validation.Errors);
 
-        var id = await _service.CreateAsync(dto, ct);
+        var id = await service.CreateAsync(dto, ct);
         return CreatedAtAction(nameof(GetById), new { id }, new { id });
     }
 
@@ -55,7 +55,7 @@ public class ProductsController : ControllerBase
             PageSize = pageSize
         };
 
-        var (items, total) = await _service.GetFilteredAsync(filter, ct);
+        var (items, total) = await service.GetFilteredAsync(filter, ct);
         return Ok(new { items, totalCount = total, pageNumber, pageSize });
     }
 
@@ -64,10 +64,28 @@ public class ProductsController : ControllerBase
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
     {
-        var product = await _service.GetByIdAsync(id, ct);
+        var product = await service.GetByIdAsync(id, ct);
         if (product is null)
             return NotFound(new { message = $"Товар с Id '{id}' не найден" });
 
         return Ok(product);
+    }
+
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdateProductDto dto,
+        [FromServices] IValidator<UpdateProductDto> validator,
+        CancellationToken ct)
+    {
+        var validation = await validator.ValidateAsync(dto, ct);
+        if (!validation.IsValid)
+            throw new ValidationException(validation.Errors);
+
+        var updated = await service.UpdateAsync(id, dto, ct);
+        return updated ? NoContent() : NotFound(new { message = $"Товар с Id '{id}' не найден" });
     }
 }

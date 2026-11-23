@@ -10,23 +10,25 @@ namespace HttpAndGrpcProductServices.Application.Services
 {
     public class ProductService : IProductService
     {
-        private readonly IProductRepository _repository;
-        private readonly IValidator<CreateProductDto> _createValidator;
-        private readonly IValidator<GetProductsFilterDto> _filterValidator;
+        private readonly IProductRepository repository;
+
+        private readonly IValidator<CreateProductDto> createValidator;
+
+        private readonly IValidator<GetProductsFilterDto> filterValidator;
 
         public ProductService(
             IProductRepository repository,
             IValidator<CreateProductDto> createValidator,
             IValidator<GetProductsFilterDto> filterValidator)
         {
-            _repository = repository;
-            _createValidator = createValidator;
-            _filterValidator = filterValidator;
+            this.repository = repository;
+            this.createValidator = createValidator;
+            this.filterValidator = filterValidator;
         }
 
         public async Task<Guid> CreateAsync(CreateProductDto dto, CancellationToken ct = default)
         {
-            var validationResult = await _createValidator.ValidateAsync(dto, ct);
+            var validationResult = await createValidator.ValidateAsync(dto, ct);
             if (!validationResult.IsValid)
                 throw new ValidationException(validationResult.Errors);
 
@@ -41,12 +43,12 @@ namespace HttpAndGrpcProductServices.Application.Services
                 WarehouseNumber = dto.WarehouseNumber
             };
 
-            return await _repository.AddAsync(product, ct);
+            return await repository.AddAsync(product, ct);
         }
 
         public async Task<ProductDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
         {
-            var product = await _repository.GetByIdAsync(id, ct);
+            var product = await repository.GetByIdAsync(id, ct);
             if (product is null) return null;
 
             return product.MapToDto();
@@ -55,11 +57,11 @@ namespace HttpAndGrpcProductServices.Application.Services
         public async Task<(IReadOnlyList<ProductDto> Items, int TotalCount)> GetFilteredAsync(
             GetProductsFilterDto filter, CancellationToken ct = default)
         {
-            var validationResult = await _filterValidator.ValidateAsync(filter, ct);
+            var validationResult = await filterValidator.ValidateAsync(filter, ct);
             if (!validationResult.IsValid)
                 throw new ValidationException(validationResult.Errors);
 
-            var (items, total) = await _repository.GetFilteredAsync(
+            var (items, total) = await repository.GetFilteredAsync(
                 filter.CreatedFrom,
                 filter.CreatedTo,
                 filter.Type.HasValue ? (ProductType)filter.Type.Value : null,
@@ -69,6 +71,22 @@ namespace HttpAndGrpcProductServices.Application.Services
                 ct);
 
             return (items.Select(x => x.MapToDto()).ToList(), total);
+        }
+
+        public async Task<bool> UpdateAsync(Guid id, UpdateProductDto dto, CancellationToken ct = default)
+        {
+            var product = new Product
+            {
+                Id = id,
+                Name = dto.Name,
+                Price = dto.Price,
+                Weight = dto.Weight,
+                Type = (ProductType)dto.Type,
+                WarehouseNumber = dto.WarehouseNumber,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            return await repository.UpdateAsync(product, ct);
         }
     }
 }

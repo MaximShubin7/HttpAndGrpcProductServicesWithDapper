@@ -7,6 +7,14 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.100" />
+    <PackageReference Include="FluentMigrator" Version="8.0.1" />
+    <PackageReference Include="FluentMigrator.Runner" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="11.0.0" />
+    <PackageReference Include="Npgsql" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\HttpAndGrpcProductServices.Application\HttpAndGrpcProductServices.Application.csproj" />
     <ProjectReference Include="..\HttpAndGrpcProductServices.Domain\HttpAndGrpcProductServices.Domain.csproj" />
   </ItemGroup>

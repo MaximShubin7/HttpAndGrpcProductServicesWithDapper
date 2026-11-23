@@ -2,6 +2,7 @@ using HttpAndGrpcProductServices.Application;
 using HttpAndGrpcProductServices.Infrastructure;
 using HttpAndGrpcProductServices.Grpc;
 using HttpAndGrpcProductServices.Http;
+using FluentMigrator.Runner;
 
 namespace HttpAndGrpcProductServices
 {
@@ -12,11 +13,17 @@ namespace HttpAndGrpcProductServices
             var builder = WebApplication.CreateBuilder(args);
 
             builder.Services.AddApplication();
-            builder.Services.AddInfrastructure();
+            builder.Services.AddInfrastructure(builder.Configuration);
             builder.Services.AddHttpPresentation();
             builder.Services.AddGrpcPresentation();
 
             var app = builder.Build();
+
+            using (var scope = app.Services.CreateScope())
+            {
+                var runner = scope.ServiceProvider.GetRequiredService<IMigrationRunner>();
+                runner.MigrateUp();
+            }
 
             app.UseSwagger();
             app.UseSwaggerUI(c =>
